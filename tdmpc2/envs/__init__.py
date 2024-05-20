@@ -12,7 +12,8 @@ def missing_dependencies(task):
 
 try:
 	from envs.dmcontrol import make_env as make_dm_control_env
-except:
+except Exception as e:
+	raise e
 	make_dm_control_env = missing_dependencies
 try:
 	from envs.maniskill import make_env as make_maniskill_env
@@ -57,9 +58,10 @@ def make_env(cfg):
 	Make an environment for TD-MPC2 experiments.
 	"""
 	gym.logger.set_level(40)
+	print("hello")
+ 
 	if cfg.multitask:
-		env = make_multitask_env(cfg)
-
+		env = make_multitask_env(cfg) 
 	else:
 		env = None
 		for fn in [make_dm_control_env, make_maniskill_env, make_metaworld_env, make_myosuite_env]:

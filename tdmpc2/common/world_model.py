@@ -22,13 +22,13 @@ class WorldModel(nn.Module):
 			for i in range(len(cfg.tasks)):
 				self._action_masks[i, :cfg.action_dims[i]] = 1.
 		self._encoder = layers.enc(cfg)
-		self._dynamics = layers.mlp(cfg.latent_dim + cfg.action_dim + cfg.task_dim, 2*[cfg.mlp_dim], cfg.latent_dim, act=layers.SimNorm(cfg))
-		self._reward = layers.mlp(cfg.latent_dim + cfg.action_dim + cfg.task_dim, 2*[cfg.mlp_dim], max(cfg.num_bins, 1))
-		self._pi = layers.mlp(cfg.latent_dim + cfg.task_dim, 2*[cfg.mlp_dim], 2*cfg.action_dim)
-		self._Qs = layers.Ensemble([layers.mlp(cfg.latent_dim + cfg.action_dim + cfg.task_dim, 2*[cfg.mlp_dim], max(cfg.num_bins, 1), dropout=cfg.dropout) for _ in range(cfg.num_q)])
+		self._dynamics = layers.mlp(cfg.latent_dim + cfg.action_dim + cfg.task_dim, 2*[cfg.mlp_dim], cfg.latent_dim, act=layers.SimNorm(cfg), layer_norm=cfg.layer_norm, batch_norm=cfg.batch_norm)
+		self._reward = layers.mlp(cfg.latent_dim + cfg.action_dim + cfg.task_dim, 2*[cfg.mlp_dim], max(cfg.num_bins, 1), layer_norm=cfg.layer_norm, batch_norm=cfg.batch_norm)
+		self._pi = layers.mlp(cfg.latent_dim + cfg.task_dim, 2*[cfg.mlp_dim], 2*cfg.action_dim, layer_norm=cfg.layer_norm, batch_norm=cfg.batch_norm)
+		self._Qs = layers.Ensemble([layers.mlp(cfg.latent_dim + cfg.action_dim + cfg.task_dim, 2*[cfg.mlp_dim], max(cfg.num_bins, 1), dropout=cfg.dropout, layer_norm=cfg.layer_norm, batch_norm=cfg.batch_norm) for _ in range(cfg.num_q)])
 		self.apply(init.weight_init)
 		init.zero_([self._reward[-1].weight, self._Qs.params[-2]])
-		self._target_Qs = deepcopy(self._Qs).requires_grad_(False)
+		self._target_Qs = deepcopy(self._Qs).requires_grad_(False) if cfg.use_target_q else None
 		self.log_std_min = torch.tensor(cfg.log_std_min)
 		self.log_std_dif = torch.tensor(cfg.log_std_max) - self.log_std_min
 
@@ -52,7 +52,8 @@ class WorldModel(nn.Module):
 		Overriding `train` method to keep target Q-networks in eval mode.
 		"""
 		super().train(mode)
-		self._target_Qs.train(False)
+		if self.cfg.use_target_q:
+			self._target_Qs.train(False)
 		return self
 
 	def track_q_grad(self, mode=True):
@@ -71,6 +72,9 @@ class WorldModel(nn.Module):
 		"""
 		Soft-update target Q-networks using Polyak averaging.
 		"""
+		if not self.cfg.use_target_q:
+			return
+  
 		with torch.no_grad():
 			for p, p_target in zip(self._Qs.parameters(), self._target_Qs.parameters()):
 				p_target.data.lerp_(p.data, self.cfg.tau)

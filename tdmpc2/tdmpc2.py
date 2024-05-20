@@ -213,7 +213,7 @@ class TDMPC2:
 		"""
 		pi = self.model.pi(next_z, task)[1]
 		discount = self.discount[task].unsqueeze(-1) if self.cfg.multitask else self.discount
-		return reward + discount * self.model.Q(next_z, pi, task, return_type='min', target=True)
+		return reward + discount * self.model.Q(next_z, pi, task, return_type='min', target=self.cfg.use_target_q)
 
 	def update(self, buffer):
 		"""

@@ -1,5 +1,5 @@
-defaults:
-    - override hydra/launcher: submitit_local
+# defaults:
+    # - override hydra/launcher: submitit_local
 
 # environment
 task: dog-run
@@ -60,6 +60,9 @@ task_dim: 96
 num_q: 5
 dropout: 0.01
 simnorm_dim: 8
+layer_norm: False
+batch_norm: True
+use_target_q: False
 
 # logging
 wandb_project: ???

@@ -183,6 +183,7 @@ def make_env(cfg):
 	Make DMControl environment.
 	Adapted from https://github.com/facebookresearch/drqv2
 	"""
+	print("called")
 	domain, task = cfg.task.replace('-', '_').split('_', 1)
 	domain = dict(cup='ball_in_cup', pointmass='point_mass').get(domain, domain)
 	if (domain, task) not in suite.ALL_TASKS:

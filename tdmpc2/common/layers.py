@@ -87,17 +87,20 @@ class NormedLinear(nn.Linear):
 	Linear layer with LayerNorm, activation, and optionally dropout.
 	"""
 
-	def __init__(self, *args, dropout=0., act=nn.Mish(inplace=True), **kwargs):
+	def __init__(self, *args, dropout=0., layer_norm=True, batch_norm=False, act=nn.Mish(inplace=True), **kwargs):
 		super().__init__(*args, **kwargs)
-		self.ln = nn.LayerNorm(self.out_features)
+		self.ln = nn.LayerNorm(self.out_features) if layer_norm else nn.Identity()
+		self.bn = nn.BatchNorm1d(self.out_features) if batch_norm else nn.Identity()
+  
 		self.act = act
 		self.dropout = nn.Dropout(dropout, inplace=True) if dropout else None
 
 	def forward(self, x):
 		x = super().forward(x)
+  
 		if self.dropout:
 			x = self.dropout(x)
-		return self.act(self.ln(x))
+		return self.bn(self.act(self.ln(x)))
 	
 	def __repr__(self):
 		repr_dropout = f", dropout={self.dropout.p}" if self.dropout else ""
@@ -107,7 +110,7 @@ class NormedLinear(nn.Linear):
 			f"act={self.act.__class__.__name__})"
 
 
-def mlp(in_dim, mlp_dims, out_dim, act=None, dropout=0.):
+def mlp(in_dim, mlp_dims, out_dim, act=None, dropout=0., layer_norm=True, batch_norm=False):
 	"""
 	Basic building block of TD-MPC2.
 	MLP with LayerNorm, Mish activations, and optionally dropout.
@@ -116,9 +119,13 @@ def mlp(in_dim, mlp_dims, out_dim, act=None, dropout=0.):
 		mlp_dims = [mlp_dims]
 	dims = [in_dim] + mlp_dims + [out_dim]
 	mlp = nn.ModuleList()
+ 
+	if batch_norm:
+		mlp.append(nn.BatchNorm1d(dims[0]))
+ 
 	for i in range(len(dims) - 2):
-		mlp.append(NormedLinear(dims[i], dims[i+1], dropout=dropout*(i==0)))
-	mlp.append(NormedLinear(dims[-2], dims[-1], act=act) if act else nn.Linear(dims[-2], dims[-1]))
+		mlp.append(NormedLinear(dims[i], dims[i+1], dropout=dropout*(i==0), layer_norm=layer_norm, batch_norm=batch_norm))
+	mlp.append(NormedLinear(dims[-2], dims[-1], layer_norm=layer_norm, batch_norm=batch_norm, act=act) if act else nn.Linear(dims[-2], dims[-1]))
 	return nn.Sequential(*mlp)
 
 
@@ -145,7 +152,7 @@ def enc(cfg, out={}):
 	"""
 	for k in cfg.obs_shape.keys():
 		if k == 'state':
-			out[k] = mlp(cfg.obs_shape[k][0] + cfg.task_dim, max(cfg.num_enc_layers-1, 1)*[cfg.enc_dim], cfg.latent_dim, act=SimNorm(cfg))
+			out[k] = mlp(cfg.obs_shape[k][0] + cfg.task_dim, max(cfg.num_enc_layers-1, 1)*[cfg.enc_dim], cfg.latent_dim, act=SimNorm(cfg), layer_norm=cfg.layer_norm, batch_norm=cfg.batch_norm)
 		elif k == 'rgb':
 			out[k] = conv(cfg.obs_shape[k], cfg.num_channels, act=SimNorm(cfg))
 		else:
